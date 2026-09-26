@@ -4,87 +4,132 @@ const db = require('./db');
 const app = express();
 app.use(express.json());
 
-// ================= USER ENDPOINTS ================= //
+// Initialize Students Table
+const initDb = async () => {
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS students (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL UNIQUE,
+        age INT NOT NULL
+      );
+    `);
+    console.log('[DB SETUP] Students table verified/created successfully.');
+  } catch (error) {
+    console.error('[DB SETUP ERROR]', error.message);
+  }
+};
+initDb();
 
-// POST /users -> Add a new user
-app.post('/users', async (req, res) => {
-  const { name, email } = req.body;
+// 1. POST /students -> Insert a new student
+app.post('/students', async (req, res) => {
+  const { name, email, age } = req.body;
 
-  if (!name || !email) {
-    return res.status(400).json({ error: 'Name and email are required' });
+  if (!name || !email || age === undefined) {
+    return res.status(400).json({ error: 'Name, email, and age are required' });
   }
 
   try {
     const [result] = await db.query(
-      'INSERT INTO users (name, email) VALUES (?, ?)',
-      [name, email]
+      'INSERT INTO students (name, email, age) VALUES (?, ?, ?)',
+      [name, email, age]
     );
-    console.log(`[INSERT USER] Inserted ID: ${result.insertId}`);
+    console.log(`[INSERT] Student added with ID: ${result.insertId}`);
     res.status(201).json({
-      message: 'User added successfully',
-      userId: result.insertId
+      message: 'Student added successfully',
+      studentId: result.insertId
     });
   } catch (error) {
-    console.error('[INSERT USER ERROR]', error.message);
+    console.error('[INSERT ERROR]', error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
-// GET /users -> Retrieve all users from the database
-app.get('/users', async (req, res) => {
+// 2. GET /students -> Retrieve all students
+app.get('/students', async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM users');
-    console.log(`[GET USERS] Retrieved ${rows.length} users`);
+    const [rows] = await db.query('SELECT * FROM students');
+    console.log(`[GET ALL] Retrieved ${rows.length} students.`);
     res.json(rows);
   } catch (error) {
-    console.error('[GET USERS ERROR]', error.message);
+    console.error('[GET ALL ERROR]', error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
-// ================= BUS ENDPOINTS ================= //
-
-// POST /buses -> Add a new bus
-app.post('/buses', async (req, res) => {
-  const { busNumber, totalSeats, availableSeats } = req.body;
-
-  if (!busNumber || totalSeats === undefined || availableSeats === undefined) {
-    return res.status(400).json({ error: 'busNumber, totalSeats, and availableSeats are required' });
-  }
+// 3. GET /students/:id -> Retrieve a student by ID
+app.get('/students/:id', async (req, res) => {
+  const { id } = req.params;
 
   try {
-    const [result] = await db.query(
-      'INSERT INTO buses (busNumber, totalSeats, availableSeats) VALUES (?, ?, ?)',
-      [busNumber, totalSeats, availableSeats]
-    );
-    console.log(`[INSERT BUS] Inserted ID: ${result.insertId}`);
-    res.status(201).json({
-      message: 'Bus added successfully',
-      busId: result.insertId
-    });
+    const [rows] = await db.query('SELECT * FROM students WHERE id = ?', [id]);
+
+    if (rows.length === 0) {
+      console.log(`[GET BY ID WARN] Student with ID ${id} not found.`);
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    console.log(`[GET BY ID] Retrieved student ID: ${id}`);
+    res.json(rows[0]);
   } catch (error) {
-    console.error('[INSERT BUS ERROR]', error.message);
+    console.error('[GET BY ID ERROR]', error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
-// GET /buses/available/:seats -> Retrieve all buses with availableSeats greater than :seats
-app.get('/buses/available/:seats', async (req, res) => {
-  const minSeats = parseInt(req.params.seats, 10);
-
-  if (isNaN(minSeats)) {
-    return res.status(400).json({ error: 'Seats parameter must be a valid number' });
-  }
+// 4. PUT /students/:id -> Update student details by ID
+app.put('/students/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, email, age } = req.body;
 
   try {
-    const [rows] = await db.query(
-      'SELECT * FROM buses WHERE availableSeats > ?',
-      [minSeats]
-    );
-    console.log(`[GET BUSES] Found ${rows.length} buses with availableSeats > ${minSeats}`);
-    res.json(rows);
+    // Build dynamic update query depending on provided fields
+    const updates = [];
+    const values = [];
+
+    if (name) { updates.push('name = ?'); values.push(name); }
+    if (email) { updates.push('email = ?'); values.push(email); }
+    if (age !== undefined) { updates.push('age = ?'); values.push(age); }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'Please provide fields to update' });
+    }
+
+    values.push(id);
+    const query = `UPDATE students SET ${updates.join(', ')} WHERE id = ?`;
+
+    const [result] = await db.query(query, values);
+
+    if (result.affectedRows === 0) {
+      console.log(`[UPDATE WARN] Student with ID ${id} not found.`);
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    console.log(`[UPDATE] Updated student with ID: ${id}`);
+    res.json({ message: 'Student updated successfully' });
   } catch (error) {
-    console.error('[GET BUSES ERROR]', error.message);
+    console.error('[UPDATE ERROR]', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 5. DELETE /students/:id -> Delete a student by ID
+app.delete('/students/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const [result] = await db.query('DELETE FROM students WHERE id = ?', [id]);
+
+    if (result.affectedRows === 0) {
+      console.log(`[DELETE WARN] Student with ID ${id} not found.`);
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    console.log(`[DELETE] Deleted student with ID: ${id}`);
+    res.json({ message: 'Student deleted successfully' });
+  } catch (error) {
+    console.error('[DELETE ERROR]', error.message);
     res.status(500).json({ error: error.message });
   }
 });
