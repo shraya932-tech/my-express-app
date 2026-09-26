@@ -1,21 +1,25 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 
-const User = sequelize.define('User', {
+const Payment = sequelize.define('Payment', {
   id: {
     type: DataTypes.INTEGER,
     autoIncrement: true,
     primaryKey: true
   },
-  name: {
-    type: DataTypes.STRING,
+  bookingId: {
+    type: DataTypes.INTEGER,
     allowNull: false
   },
-  email: {
+  amount: {
+    type: DataTypes.FLOAT,
+    allowNull: false
+  },
+  status: {
     type: DataTypes.STRING,
     allowNull: false,
-    unique: true
+    defaultValue: 'PENDING'
   }
 });
 
-module.exports = User;
+module.exports = Payment;
