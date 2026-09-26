@@ -1,76 +1,77 @@
 const express = require('express');
 const cors = require('cors');
-const sequelize = require('./config/database');
-const Student = require('./models/Student');
-const Course = require('./models/Course');
-const StudentCourse = require('./models/StudentCourse');
+const sequelize = require('./config/database'); // or './util/database'
+
+const User = require('./models/User');
+const Bus = require('./models/Bus');
+const Booking = require('./models/Booking');
+const Payment = require('./models/Payment');
 
 const app = express();
+
 app.use(cors());
 app.use(express.json());
 
-// ================= DEFINE MANY-TO-MANY ASSOCIATION ================= //
-Student.belongsToMany(Course, { through: StudentCourse });
-Course.belongsToMany(Student, { through: StudentCourse });
+// ================= DEFINE ASSOCIATIONS ================= //
+// User <-> Booking (One-to-Many)
+User.hasMany(Booking, { onDelete: 'CASCADE' });
+Booking.belongsTo(User);
 
-// ================= ENDPOINTS ================= //
+// Bus <-> Booking (One-to-Many)
+Bus.hasMany(Booking, { onDelete: 'CASCADE' });
+Booking.belongsTo(Bus);
 
-// 1. Create a Student
-app.post('/students', async (req, res) => {
+// Booking <-> Payment (One-to-One)
+Booking.hasOne(Payment, { onDelete: 'CASCADE' });
+Payment.belongsTo(Booking);
+
+// ================= INITIALIZE DB AND SEED DATA ================= //
+const initDatabase = async () => {
   try {
-    const student = await Student.create(req.body);
-    res.status(201).json(student);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+    // Sync models and update schema with foreign keys
+    await sequelize.sync({ force: true });
+    console.log('[SEQUELIZE] Database synced with foreign key associations.');
 
-// 2. Create a Course
-app.post('/courses', async (req, res) => {
-  try {
-    const course = await Course.create(req.body);
-    res.status(201).json(course);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+    // 1. Create Users
+    const user1 = await User.create({ name: 'John Doe', email: 'john@example.com' });
+    const user2 = await User.create({ name: 'Jane Smith', email: 'jane@example.com' });
 
-// 3. Enroll Student in a Course (Adding entry to junction table)
-app.post('/students/:studentId/courses/:courseId', async (req, res) => {
-  const { studentId, courseId } = req.params;
-  try {
-    const student = await Student.findByPk(studentId);
-    const course = await Course.findByPk(courseId);
+    // 2. Create Buses
+    const bus1 = await Bus.create({ busNumber: 'BUS-101', totalSeats: 40, availableSeats: 25 });
 
-    if (!student || !course) {
-      return res.status(404).json({ error: 'Student or Course not found' });
-    }
-
-    await student.addCourse(course);
-    res.json({ message: `Student ${studentId} enrolled in Course ${courseId} successfully.` });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// 4. Retrieve Student with their Enrolled Courses
-app.get('/students/:id', async (req, res) => {
-  try {
-    const student = await Student.findByPk(req.params.id, {
-      include: Course
+    // 3. Create Sample Bookings linked with User IDs and Bus IDs
+    const booking1 = await Booking.create({
+      UserId: user1.id,
+      BusId: bus1.id,
+      seatNumber: 12
     });
-    if (!student) return res.status(404).json({ error: 'Student not found' });
-    res.json(student);
+
+    const booking2 = await Booking.create({
+      UserId: user2.id,
+      BusId: bus1.id,
+      seatNumber: 15
+    });
+
+    console.log('[SEED] Inserted bookings linked to users successfully.');
+
+  } catch (error) {
+    console.error('[DATABASE INIT ERROR]', error.message);
+  }
+};
+
+initDatabase();
+
+// Route to fetch bookings with associated User data
+app.get('/bookings', async (req, res) => {
+  try {
+    const bookings = await Booking.findAll({ include: [User, Bus] });
+    res.json(bookings);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Sync Database & Start Server
-sequelize.sync({ alter: true })
-  .then(() => {
-    console.log('[SEQUELIZE] Many-to-Many associations synced successfully.');
-    const PORT = process.env.PORT || 3000;
-    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-  })
-  .catch((err) => console.error('[DB ERROR]', err.message));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
