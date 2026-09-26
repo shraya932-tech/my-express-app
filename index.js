@@ -1,20 +1,20 @@
 const express = require('express');
 const cors = require('cors');
-const sequelize = require('./config/database'); // Adjust path if using ./util/database
-const expenseRoutes = require('./routes/expense');
+const sequelize = require('./config/database');
+const userRoutes = require('./routes/user');
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
-// Expense Routes
-app.use(expenseRoutes);
+// Routes
+app.use(userRoutes);
 
-// Sync Database and Start Server
+// Sync DB & Start Server
 sequelize.sync()
   .then(() => {
-    console.log('[SEQUELIZE] Database synced for Expense App.');
+    console.log('[SEQUELIZE] Database connected & synced.');
     const PORT = process.env.PORT || 3000;
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   })
