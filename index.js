@@ -4,11 +4,48 @@ const db = require('./db');
 const app = express();
 app.use(express.json());
 
-// Test Route to check Database Connection
-app.get('/test-db', async (req, res) => {
+// Endpoint to run database schema setup
+app.get('/init-db', async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT 1 + 1 AS result');
-    res.json({ message: 'Database connected successfully!', result: rows });
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL UNIQUE
+      );
+    `);
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS buses (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        busNumber VARCHAR(255) NOT NULL,
+        totalSeats INT NOT NULL,
+        availableSeats INT NOT NULL
+      );
+    `);
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS bookings (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        userId INT,
+        busId INT,
+        seatNumber INT NOT NULL,
+        FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (busId) REFERENCES buses(id) ON DELETE CASCADE
+      );
+    `);
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS payments (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        bookingId INT,
+        amountPaid DECIMAL(10, 2) NOT NULL,
+        paymentStatus VARCHAR(255) NOT NULL,
+        FOREIGN KEY (bookingId) REFERENCES bookings(id) ON DELETE CASCADE
+      );
+    `);
+
+    res.json({ message: 'Database schema created successfully!' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
