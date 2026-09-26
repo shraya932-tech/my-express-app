@@ -4,10 +4,12 @@ const db = require('./db');
 const app = express();
 app.use(express.json());
 
-// 1. Insertion: Create a new user
+// ================= USER ENDPOINTS ================= //
+
+// POST /users -> Add a new user
 app.post('/users', async (req, res) => {
   const { name, email } = req.body;
-  
+
   if (!name || !email) {
     return res.status(400).json({ error: 'Name and email are required' });
   }
@@ -17,61 +19,72 @@ app.post('/users', async (req, res) => {
       'INSERT INTO users (name, email) VALUES (?, ?)',
       [name, email]
     );
-    console.log(`[INSERT] User inserted successfully with ID: ${result.insertId}`);
+    console.log(`[INSERT USER] Inserted ID: ${result.insertId}`);
     res.status(201).json({
-      message: 'User created successfully',
+      message: 'User added successfully',
       userId: result.insertId
     });
   } catch (error) {
-    console.error('[INSERT ERROR]', error.message);
+    console.error('[INSERT USER ERROR]', error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
-// 2. Updating: Update user details by ID
-app.put('/users/:id', async (req, res) => {
-  const { id } = req.params;
-  const { name, email } = req.body;
+// GET /users -> Retrieve all users from the database
+app.get('/users', async (req, res) => {
+  try {
+    const [rows] = await db.query('SELECT * FROM users');
+    console.log(`[GET USERS] Retrieved ${rows.length} users`);
+    res.json(rows);
+  } catch (error) {
+    console.error('[GET USERS ERROR]', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
 
-  if (!name || !email) {
-    return res.status(400).json({ error: 'Name and email are required for update' });
+// ================= BUS ENDPOINTS ================= //
+
+// POST /buses -> Add a new bus
+app.post('/buses', async (req, res) => {
+  const { busNumber, totalSeats, availableSeats } = req.body;
+
+  if (!busNumber || totalSeats === undefined || availableSeats === undefined) {
+    return res.status(400).json({ error: 'busNumber, totalSeats, and availableSeats are required' });
   }
 
   try {
     const [result] = await db.query(
-      'UPDATE users SET name = ?, email = ? WHERE id = ?',
-      [name, email, id]
+      'INSERT INTO buses (busNumber, totalSeats, availableSeats) VALUES (?, ?, ?)',
+      [busNumber, totalSeats, availableSeats]
     );
-
-    if (result.affectedRows === 0) {
-      console.log(`[UPDATE WARN] User with ID ${id} not found.`);
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    console.log(`[UPDATE] User with ID ${id} updated successfully.`);
-    res.json({ message: 'User updated successfully' });
+    console.log(`[INSERT BUS] Inserted ID: ${result.insertId}`);
+    res.status(201).json({
+      message: 'Bus added successfully',
+      busId: result.insertId
+    });
   } catch (error) {
-    console.error('[UPDATE ERROR]', error.message);
+    console.error('[INSERT BUS ERROR]', error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
-// 3. Deletion: Delete user by ID
-app.delete('/users/:id', async (req, res) => {
-  const { id } = req.params;
+// GET /buses/available/:seats -> Retrieve all buses with availableSeats greater than :seats
+app.get('/buses/available/:seats', async (req, res) => {
+  const minSeats = parseInt(req.params.seats, 10);
+
+  if (isNaN(minSeats)) {
+    return res.status(400).json({ error: 'Seats parameter must be a valid number' });
+  }
 
   try {
-    const [result] = await db.query('DELETE FROM users WHERE id = ?', [id]);
-
-    if (result.affectedRows === 0) {
-      console.log(`[DELETE WARN] User with ID ${id} not found.`);
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    console.log(`[DELETE] User with ID ${id} deleted successfully.`);
-    res.json({ message: 'User deleted successfully' });
+    const [rows] = await db.query(
+      'SELECT * FROM buses WHERE availableSeats > ?',
+      [minSeats]
+    );
+    console.log(`[GET BUSES] Found ${rows.length} buses with availableSeats > ${minSeats}`);
+    res.json(rows);
   } catch (error) {
-    console.error('[DELETE ERROR]', error.message);
+    console.error('[GET BUSES ERROR]', error.message);
     res.status(500).json({ error: error.message });
   }
 });
