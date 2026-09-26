@@ -1,70 +1,76 @@
 const express = require('express');
 const cors = require('cors');
 const sequelize = require('./config/database');
-const User = require('./models/User');
-const Post = require('./models/Post');
+const Student = require('./models/Student');
+const Course = require('./models/Course');
+const StudentCourse = require('./models/StudentCourse');
 
 const app = express();
-
 app.use(cors());
 app.use(express.json());
 
-// ================= DEFINE ONE-TO-MANY ASSOCIATION ================= //
-User.hasMany(Post, { onDelete: 'CASCADE' });
-Post.belongsTo(User);
+// ================= DEFINE MANY-TO-MANY ASSOCIATION ================= //
+Student.belongsToMany(Course, { through: StudentCourse });
+Course.belongsToMany(Student, { through: StudentCourse });
 
-// ================= CONTROLLERS & ROUTES ================= //
+// ================= ENDPOINTS ================= //
 
-// 1. POST /posts -> Create a post associated with a specific user
-app.post('/users/:userId/posts', async (req, res) => {
-  const { userId } = req.params;
-  const { title, content } = req.body;
-
+// 1. Create a Student
+app.post('/students', async (req, res) => {
   try {
-    const user = await User.findByPk(userId);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    const post = await user.createPost({ title, content });
-    console.log(`[CREATE POST] Created post ID: ${post.id} for User ID: ${userId}`);
-    res.status(201).json({ message: 'Post created successfully', post });
+    const student = await Student.create(req.body);
+    res.status(201).json(student);
   } catch (error) {
-    console.error('[CREATE POST ERROR]', error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
-// 2. GET /users/:userId/posts -> Retrieve all posts for a given user
-app.get('/users/:userId/posts', async (req, res) => {
-  const { userId } = req.params;
-
+// 2. Create a Course
+app.post('/courses', async (req, res) => {
   try {
-    const user = await User.findByPk(userId, {
-      include: [Post] // Includes all associated posts
+    const course = await Course.create(req.body);
+    res.status(201).json(course);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 3. Enroll Student in a Course (Adding entry to junction table)
+app.post('/students/:studentId/courses/:courseId', async (req, res) => {
+  const { studentId, courseId } = req.params;
+  try {
+    const student = await Student.findByPk(studentId);
+    const course = await Course.findByPk(courseId);
+
+    if (!student || !course) {
+      return res.status(404).json({ error: 'Student or Course not found' });
+    }
+
+    await student.addCourse(course);
+    res.json({ message: `Student ${studentId} enrolled in Course ${courseId} successfully.` });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 4. Retrieve Student with their Enrolled Courses
+app.get('/students/:id', async (req, res) => {
+  try {
+    const student = await Student.findByPk(req.params.id, {
+      include: Course
     });
-
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    console.log(`[GET USER POSTS] Retreived posts for User ID: ${userId}`);
-    res.json(user);
+    if (!student) return res.status(404).json({ error: 'Student not found' });
+    res.json(student);
   } catch (error) {
-    console.error('[GET USER POSTS ERROR]', error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
-// Sync Database and Start Server
+// Sync Database & Start Server
 sequelize.sync({ alter: true })
   .then(() => {
-    console.log('[SEQUELIZE] Database & One-to-Many associations synced.');
+    console.log('[SEQUELIZE] Many-to-Many associations synced successfully.');
     const PORT = process.env.PORT || 3000;
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-    });
+    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   })
-  .catch((err) => {
-    console.error('[DATABASE INIT ERROR]', err.message);
-  });
+  .catch((err) => console.error('[DB ERROR]', err.message));
